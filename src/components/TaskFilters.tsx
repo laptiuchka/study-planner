@@ -1,5 +1,5 @@
 import React from 'react';
-import { type FilterStatus, type SortOrder } from '../types/task';
+import { type SortOrder } from '../types/task';
 import { useTaskContext } from '../hooks/useTaskContext';
 import './TaskFilters.scss';
 
