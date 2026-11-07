@@ -1,48 +1,66 @@
 import React from 'react';
-import { type FilterStatus } from '../types/task';
+import { type FilterStatus, type SortOrder } from '../types/task';
+import { useTaskContext } from '../hooks/useTaskContext';
+import './TaskFilters.scss';
 
-interface TaskFiltersProps {
-  currentFilter: FilterStatus;
-  onFilterChange: (filter: FilterStatus) => void;
-  sortOrder: 'none' | 'desc' | 'asc';
-  onSortChange: (order: 'none' | 'desc' | 'asc') => void;
-}
+export const TaskFilters: React.FC = () => {
+  const { filter, setFilter, sortOrder, setSortOrder, clearCompleted, resetTasks } = useTaskContext();
 
-export const TaskFilters: React.FC<TaskFiltersProps> = ({
-  currentFilter,
-  onFilterChange,
-  sortOrder,
-  onSortChange,
-}) => {
   return (
     <div className="task-filters">
-      <button
-        className={`filter-btn ${currentFilter === 'all' ? 'active' : ''}`}
-        onClick={() => onFilterChange('all')}
-      >
-        Всі
-      </button>
-      <button
-        className={`filter-btn ${currentFilter === 'active' ? 'active' : ''}`}
-        onClick={() => onFilterChange('active')}
-      >
-        Невиконані
-      </button>
-      <button
-        className={`filter-btn ${currentFilter === 'completed' ? 'active' : ''}`}
-        onClick={() => onFilterChange('completed')}
-      >
-        Виконані
-      </button>
-      <select
-        className="sort-select"
-        value={sortOrder}
-        onChange={(e) => onSortChange(e.target.value as 'none' | 'desc' | 'asc')}
-      >
-        <option value="none">Без сортування</option>
-        <option value="desc">Пріоритет (високий ➔ низький)</option>
-        <option value="asc">Пріоритет (низький ➔ високий)</option>
-      </select>
+      <div className="task-filters__buttons">
+        <button
+          type="button"
+          className={`task-filters__btn ${filter === 'all' ? 'task-filters__btn--active' : ''}`}
+          onClick={() => setFilter('all')}
+        >
+          Всі
+        </button>
+        <button
+          type="button"
+          className={`task-filters__btn ${filter === 'active' ? 'task-filters__btn--active' : ''}`}
+          onClick={() => setFilter('active')}
+        >
+          Невиконані
+        </button>
+        <button
+          type="button"
+          className={`task-filters__btn ${filter === 'completed' ? 'task-filters__btn--active' : ''}`}
+          onClick={() => setFilter('completed')}
+        >
+          Виконані
+        </button>
+      </div>
+
+      <div className="task-filters__controls">
+        <select
+          className="task-filters__select"
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+        >
+          <option value="none">Без сортування</option>
+          <option value="desc">Пріоритет (високий ➔ низький)</option>
+          <option value="asc">Пріоритет (низький ➔ високий)</option>
+        </select>
+
+        <button
+          type="button"
+          className="task-filters__action-btn"
+          onClick={clearCompleted}
+          title="Очистити виконані завдання"
+        >
+          Очистити виконані
+        </button>
+
+        <button
+          type="button"
+          className="task-filters__action-btn task-filters__action-btn--reset"
+          onClick={resetTasks}
+          title="Скинути до початкових даних"
+        >
+          Скинути дані
+        </button>
+      </div>
     </div>
   );
 };
