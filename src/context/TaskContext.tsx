@@ -1,153 +1,276 @@
-import React, { createContext, useReducer, useEffect, useState, useRef } from 'react';
-import {
-  type Task,
-  type FilterStatus,
-  type SortOrder,
-  type ToastMessage,
-  type ToastType,
-} from '../types/task';
-import { taskReducer } from '../reducers/taskReducer';
-import { initialTasks } from '../data/initialTasks';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { Task, FilterStatus, SortOrder, ToastMessage, ToastType } from '../types/task';
+import { taskRepository, type CreateTaskPayload } from '../repositories/taskRepository';
+import { useDebounce } from '../hooks/useDebounce';
 
-export interface TaskContextType {
+interface TaskContextType {
   tasks: Task[];
+  filteredTasks: Task[];
+  isLoading: boolean;
+  error: string | null;
+  currentPage: number;
+  totalPages: number;
+  selectedTaskId: number | null;
   filter: FilterStatus;
   sortOrder: SortOrder;
+  searchQuery: string;
   toast: ToastMessage | null;
   setFilter: (filter: FilterStatus) => void;
-  setSortOrder: (order: SortOrder) => void;
-  addTask: (taskData: Omit<Task, 'id' | 'completed'>) => void;
-  updateTask: (id: number, data: Partial<Omit<Task, 'id'>>) => void;
-  toggleTask: (id: number) => void;
+  setSortOrder: (sortOrder: SortOrder) => void;
+  setSearchQuery: (query: string) => void;
+  fetchTasks: (page?: number) => void;
+  addTask: (payload: CreateTaskPayload) => Promise<void>;
+  toggleTask: (id: number) => Promise<void>;
+  updateTask: (id: number, data: Partial<Omit<Task, 'id'>>) => Promise<void>;
   requestDelete: (id: number) => void;
   undoDelete: (id: number) => void;
-  clearCompleted: () => void;
+  confirmDelete: (id: number) => Promise<void>;
+  clearCompleted: () => Promise<void>;
   resetTasks: () => void;
-  showToast: (text: string, type?: ToastType) => void;
+  selectTask: (id: number | null) => void;
   hideToast: () => void;
 }
 
-export const TaskContext = createContext<TaskContextType | null>(null);
+const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'study_planner_tasks';
+const LIMIT = 10;
+const DUMMY_JSON_MAX_ID = 254;
+
+const PRIORITY_WEIGHT: Record<string, number> = {
+  high: 3,
+  medium: 2,
+  low: 1,
+};
 
 export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [tasks, dispatch] = useReducer(taskReducer, [], () => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.map((t: Task) => ({ ...t, isPendingDelete: false }));
-        }
-      }
-    } catch (e) {
-      console.error('Помилка читання з localStorage:', e);
-    }
-    return initialTasks;
-  });
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState<number>(0);
 
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [sortOrder, setSortOrder] = useState<SortOrder>('none');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  const deleteTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const debouncedSearch = useDebounce(searchQuery, 400);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    try {
-      const tasksToSave = tasks.map(({ isPendingDelete, ...task }) => task);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasksToSave));
-    } catch (e) {
-      console.error('Помилка збереження у localStorage:', e);
-    }
-  }, [tasks]);
-
-  useEffect(() => {
-    const timers = deleteTimers.current;
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-    };
+  const showToast = useCallback((text: string, type: ToastType = 'info') => {
+    setToast({ id: Date.now(), text, type });
   }, []);
 
-  const showToast = (text: string, type: ToastType = 'info') => {
-    setToast({ id: Date.now(), text, type });
-  };
-
-  const hideToast = () => {
+  const hideToast = useCallback(() => {
     setToast(null);
+  }, []);
+
+  const fetchTasks = useCallback((page = 1) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsLoading(true);
+    setError(null);
+
+    const skip = (page - 1) * LIMIT;
+
+    taskRepository
+      .getAll({ limit: LIMIT, skip, signal: controller.signal })
+      .then((data) => {
+        setTasks(data.tasks);
+        setTotalCount(data.total);
+        setCurrentPage(page);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          setError('Не вдалося завантажити завдання з сервера.');
+          setIsLoading(false);
+          showToast('Помилка завантаження даних', 'error');
+        }
+      });
+  }, [showToast]);
+
+  useEffect(() => {
+    fetchTasks(1);
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchTasks]);
+
+  const addTask = async (payload: CreateTaskPayload) => {
+    try {
+      const created = await taskRepository.create(payload);
+      const uniqueTask: Task = { ...created, id: Date.now(), isPendingDelete: false };
+      setTasks((prev) => [uniqueTask, ...prev]);
+      showToast('Завдання успішно додано!', 'success');
+    } catch {
+      showToast('Помилка при створенні завдання', 'error');
+    }
   };
 
-  const addTask = (taskData: Omit<Task, 'id' | 'completed'>) => {
-    dispatch({ type: 'ADD_TASK', payload: taskData });
-    showToast(`Завдання "${taskData.title}" успішно додано!`, 'success');
+  const toggleTask = async (id: number) => {
+    const target = tasks.find((t) => t.id === id);
+    if (!target) return;
+
+    const newCompleted = !target.completed;
+    const previousTasks = [...tasks];
+
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completed: newCompleted } : t))
+    );
+
+    try {
+      if (id <= DUMMY_JSON_MAX_ID) {
+        await taskRepository.update(id, { completed: newCompleted });
+      }
+      showToast(newCompleted ? 'Завдання виконано!' : 'Завдання повернуто в роботу', 'info');
+    } catch {
+      setTasks(previousTasks);
+      showToast('Не вдалося оновити статус', 'error');
+    }
   };
 
-  const updateTask = (id: number, data: Partial<Omit<Task, 'id'>>) => {
-    dispatch({ type: 'UPDATE_TASK', payload: { id, data } });
-    showToast('Завдання успішно відредаговано!', 'success');
-  };
+  const updateTask = async (id: number, data: Partial<Omit<Task, 'id'>>) => {
+    const previousTasks = [...tasks];
 
-  const toggleTask = (id: number) => {
-    dispatch({ type: 'TOGGLE_TASK', payload: id });
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...data } : t))
+    );
+
+    try {
+      if (id <= DUMMY_JSON_MAX_ID) {
+        await taskRepository.update(id, data);
+      }
+      showToast('Завдання оновлено!', 'success');
+    } catch {
+      setTasks(previousTasks);
+      showToast('Помилка оновлення завдання', 'error');
+    }
   };
 
   const requestDelete = (id: number) => {
-    const taskToDelete = tasks.find((t) => t.id === id);
-    if (!taskToDelete) return;
-
-    dispatch({ type: 'REQUEST_DELETE', payload: id });
-    showToast(`Завдання "${taskToDelete.title}" буде видалено через 5 сек.`, 'warning');
-
-    const timer = setTimeout(() => {
-      dispatch({ type: 'CONFIRM_DELETE', payload: id });
-      deleteTimers.current.delete(id);
-      showToast('Завдання остаточно видалено.', 'info');
-    }, 5000);
-
-    deleteTimers.current.set(id, timer);
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, isPendingDelete: true } : t))
+    );
   };
 
   const undoDelete = (id: number) => {
-    const timer = deleteTimers.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      deleteTimers.current.delete(id);
-    }
-    dispatch({ type: 'UNDO_DELETE', payload: id });
-    showToast('Видалення скасовано.', 'success');
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, isPendingDelete: false } : t))
+    );
+    showToast('Видалення скасовано', 'info');
   };
 
-  const clearCompleted = () => {
-    dispatch({ type: 'CLEAR_COMPLETED' });
-    showToast('Виконані завдання очищено.', 'info');
+  const confirmDelete = useCallback(async (id: number) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+
+    try {
+      if (id <= DUMMY_JSON_MAX_ID) {
+        await taskRepository.delete(id);
+      }
+      showToast('Завдання остаточно видалено', 'warning');
+    } catch {
+      showToast('Помилка видалення на сервері', 'error');
+    }
+  }, [showToast]);
+
+  const clearCompleted = async () => {
+    const completedIds = tasks.filter((t) => t.completed).map((t) => t.id);
+    if (completedIds.length === 0) {
+      showToast('Немає виконаних завдань для очищення', 'info');
+      return;
+    }
+
+    setTasks((prev) => prev.filter((t) => !t.completed));
+    showToast(`Очищено виконаних завдань: ${completedIds.length}`, 'warning');
   };
 
   const resetTasks = () => {
-    dispatch({ type: 'RESET_TASKS', payload: initialTasks });
-    showToast('Дані скинуто до початкових.', 'info');
+    setFilter('all');
+    setSortOrder('none');
+    setSearchQuery('');
+    fetchTasks(1);
+    showToast('Список оновлено з сервера', 'info');
   };
+
+  const filteredTasks = useMemo(() => {
+    let result = [...tasks];
+
+    if (filter === 'active') {
+      result = result.filter((t) => !t.completed);
+    } else if (filter === 'completed') {
+      result = result.filter((t) => t.completed);
+    }
+
+    if (debouncedSearch.trim()) {
+      const query = debouncedSearch.toLowerCase().trim();
+      result = result.filter(
+        (t) =>
+          t.title.toLowerCase().includes(query) ||
+          t.category.toLowerCase().includes(query) ||
+          t.description.toLowerCase().includes(query)
+      );
+    }
+
+    if (sortOrder !== 'none') {
+      result.sort((a, b) => {
+        const diff = PRIORITY_WEIGHT[b.priority] - PRIORITY_WEIGHT[a.priority];
+        return sortOrder === 'desc' ? diff : -diff;
+      });
+    }
+
+    return result;
+  }, [tasks, filter, debouncedSearch, sortOrder]);
+
+  const totalPages = Math.ceil(totalCount / LIMIT) || 1;
 
   return (
     <TaskContext.Provider
       value={{
         tasks,
+        filteredTasks,
+        isLoading,
+        error,
+        currentPage,
+        totalPages,
+        selectedTaskId,
         filter,
         sortOrder,
+        searchQuery,
         toast,
         setFilter,
         setSortOrder,
+        setSearchQuery,
+        fetchTasks,
         addTask,
-        updateTask,
         toggleTask,
+        updateTask,
         requestDelete,
         undoDelete,
+        confirmDelete,
         clearCompleted,
         resetTasks,
-        showToast,
+        selectTask: setSelectedTaskId,
         hideToast,
       }}
     >
       {children}
     </TaskContext.Provider>
   );
+};
+
+export const useTaskContext = () => {
+  const context = useContext(TaskContext);
+  if (!context) {
+    throw new Error('useTaskContext must be used within a TaskProvider');
+  }
+  return context;
 };
