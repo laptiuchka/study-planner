@@ -20,12 +20,16 @@ export interface Task {
   isPendingDelete?: boolean;
 }
 
-export type TaskAction =
-  | { type: 'ADD_TASK'; payload: Omit<Task, 'id' | 'completed'> }
-  | { type: 'TOGGLE_TASK'; payload: number }
-  | { type: 'UPDATE_TASK'; payload: { id: number; data: Partial<Omit<Task, 'id'>> } }
-  | { type: 'REQUEST_DELETE'; payload: number }
-  | { type: 'CONFIRM_DELETE'; payload: number }
-  | { type: 'UNDO_DELETE'; payload: number }
-  | { type: 'CLEAR_COMPLETED' }
-  | { type: 'RESET_TASKS'; payload: Task[] };
+export interface ApiTodo {
+  id: number;
+  todo: string;
+  completed: boolean;
+  userId: number;
+}
+
+export interface TodosResponse {
+  todos: ApiTodo[];
+  total: number;
+  skip: number;
+  limit: number;
+}
