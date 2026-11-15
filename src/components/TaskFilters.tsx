@@ -4,10 +4,38 @@ import { useTaskContext } from '../hooks/useTaskContext';
 import './TaskFilters.scss';
 
 export const TaskFilters: React.FC = () => {
-  const { filter, setFilter, sortOrder, setSortOrder, clearCompleted, resetTasks } = useTaskContext();
+  const {
+    filter,
+    setFilter,
+    sortOrder,
+    setSortOrder,
+    searchQuery,
+    setSearchQuery,
+    clearCompleted,
+    resetTasks,
+  } = useTaskContext();
 
   return (
     <div className="task-filters">
+      <div className="task-filters__search" style={{ width: '100%', marginBottom: '0.75rem' }}>
+        <input
+          type="text"
+          className="task-filters__search-input"
+          placeholder="Пошук завдань..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '0.6rem 0.9rem',
+            borderRadius: '8px',
+            border: '1px solid #d1c4e9',
+            outline: 'none',
+            fontSize: '0.95rem',
+            boxSizing: 'border-box',
+          }}
+        />
+      </div>
+
       <div className="task-filters__buttons">
         <button
           type="button"
@@ -56,9 +84,9 @@ export const TaskFilters: React.FC = () => {
           type="button"
           className="task-filters__action-btn task-filters__action-btn--reset"
           onClick={resetTasks}
-          title="Скинути до початкових даних"
+          title="Оновити дані з сервера"
         >
-          Скинути дані
+          Оновити дані
         </button>
       </div>
     </div>

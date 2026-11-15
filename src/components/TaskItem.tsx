@@ -1,5 +1,5 @@
-import React from 'react';
-import { type Task } from '../types/task';
+import React, { useEffect, useState } from 'react';
+import type { Task } from '../types/task';
 import { useTaskContext } from '../hooks/useTaskContext';
 import './TaskItem.scss';
 
@@ -8,15 +8,42 @@ interface TaskItemProps {
   onEdit: (task: Task) => void;
 }
 
+const PRIORITY_LABELS: Record<string, string> = {
+  low: 'Низький',
+  medium: 'Середній',
+  high: 'Високий',
+};
+
 export const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
-  const { toggleTask, requestDelete, undoDelete } = useTaskContext();
+  const { toggleTask, requestDelete, undoDelete, confirmDelete, selectTask } = useTaskContext();
+  const [secondsLeft, setSecondsLeft] = useState(5);
+
+  useEffect(() => {
+    if (!task.isPendingDelete) {
+      setSecondsLeft(5);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          confirmDelete(task.id);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [task.isPendingDelete, task.id, confirmDelete]);
 
   if (task.isPendingDelete) {
     return (
-      <div className="task-item task-item--pending-delete">
+      <li className="task-item task-item--pending-delete">
         <div className="task-item__pending-info">
           <span className="task-item__pending-text">
-            Завдання <strong>"{task.title}"</strong> буде видалено...
+            Завдання «<strong>{task.title}</strong>» буде видалено через {secondsLeft} с...
           </span>
           <div className="task-item__progress-bar">
             <div className="task-item__progress-fill" />
@@ -27,36 +54,51 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
           className="task-item__btn task-item__btn--undo"
           onClick={() => undoDelete(task.id)}
         >
-          Скасувати (Undo)
+          Скасувати
         </button>
-      </div>
+      </li>
     );
   }
 
   return (
-    <div className={`task-item ${task.completed ? 'task-item--completed' : ''}`}>
-      <div className="task-item__content">
-        <div className="task-item__header">
-          <h3 className="task-item__title">{task.title}</h3>
-          <span className={`task-item__badge task-item__badge--${task.priority}`}>
-            {task.priority === 'high' ? 'Високий' : task.priority === 'medium' ? 'Середній' : 'Низький'}
-          </span>
-          <span className="task-item__badge task-item__badge--category">
-            {task.category}
-          </span>
+    <li className={`task-item ${task.completed ? 'task-item--completed' : ''}`}>
+      <div className="task-item__content" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+        <input
+          type="checkbox"
+          className="task-item__checkbox"
+          checked={task.completed}
+          onChange={() => toggleTask(task.id)}
+          style={{ marginTop: '5px', width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--accent)' }}
+        />
+        <div>
+          <div className="task-item__header">
+            <span
+              className="task-item__title"
+              onClick={() => selectTask(task.id)}
+              style={{ cursor: 'pointer' }}
+            >
+              {task.title}
+            </span>
+            <span className={`task-item__badge task-item__badge--${task.priority}`}>
+              {PRIORITY_LABELS[task.priority] || task.priority}
+            </span>
+            <span className="task-item__badge task-item__badge--category">
+              {task.category}
+            </span>
+          </div>
+          {task.description && (
+            <p className="task-item__description">{task.description}</p>
+          )}
         </div>
-        {task.description && (
-          <p className="task-item__description">{task.description}</p>
-        )}
       </div>
 
       <div className="task-item__actions">
         <button
           type="button"
-          className={`task-item__btn ${task.completed ? 'task-item__btn--secondary' : 'task-item__btn--success'}`}
-          onClick={() => toggleTask(task.id)}
+          className="task-item__btn task-item__btn--secondary"
+          onClick={() => selectTask(task.id)}
         >
-          {task.completed ? 'Повернути' : 'Виконано'}
+          Деталі
         </button>
         <button
           type="button"
@@ -73,6 +115,6 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
           Видалити
         </button>
       </div>
-    </div>
+    </li>
   );
 };

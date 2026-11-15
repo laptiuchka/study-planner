@@ -1,5 +1,5 @@
 import React from 'react';
-import { type Task } from '../types/task';
+import type { Task } from '../types/task';
 import { useTaskContext } from '../hooks/useTaskContext';
 import { TaskItem } from './TaskItem';
 import './TaskList.scss';
@@ -9,45 +9,45 @@ interface TaskListProps {
 }
 
 export const TaskList: React.FC<TaskListProps> = ({ onEditTask }) => {
-  const { tasks, filter, sortOrder } = useTaskContext();
+  const { filteredTasks, isLoading, error, currentPage, fetchTasks } = useTaskContext();
 
-  const filteredTasks = tasks.filter((task) => {
-    if (filter === 'completed') return task.completed;
-    if (filter === 'active') return !task.completed;
-    return true;
-  });
-
-  if (sortOrder !== 'none') {
-    const priorityWeight = { high: 3, medium: 2, low: 1 };
-    filteredTasks.sort((a, b) => {
-      if (sortOrder === 'desc') {
-        return priorityWeight[b.priority] - priorityWeight[a.priority];
-      }
-      return priorityWeight[a.priority] - priorityWeight[b.priority];
-    });
+  if (isLoading) {
+    return (
+      <div className="task-list__state task-list__state--loading" style={{ textAlign: 'center', padding: '2rem' }}>
+        Loading...
+      </div>
+    );
   }
 
-  if (tasks.length === 0) {
+  if (error) {
     return (
-      <div className="task-list__empty">
-        <p>Завдань поки немає. Додайте перше навчальне завдання</p>
+      <div className="task-list__state task-list__state--error" style={{ textAlign: 'center', padding: '2rem', color: '#dc3545' }}>
+        <p>{error}</p>
+        <button
+          type="button"
+          className="task-list__retry-btn"
+          onClick={() => fetchTasks(currentPage)}
+          style={{ marginTop: '0.75rem', padding: '0.5rem 1rem', cursor: 'pointer' }}
+        >
+          Спробувати ще
+        </button>
       </div>
     );
   }
 
   if (filteredTasks.length === 0) {
     return (
-      <div className="task-list__empty">
-        <p>За обраним фільтром завдань не знайдено.</p>
+      <div className="task-list__state task-list__state--empty" style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
+        Завдань не знайдено.
       </div>
     );
   }
 
   return (
-    <div className="task-list">
+    <ul className="task-list">
       {filteredTasks.map((task) => (
         <TaskItem key={task.id} task={task} onEdit={onEditTask} />
       ))}
-    </div>
+    </ul>
   );
 };
