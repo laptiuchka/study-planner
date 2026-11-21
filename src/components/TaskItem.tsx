@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router';
 import type { Task } from '../types/task';
 import { useTaskContext } from '../hooks/useTaskContext';
+import { useAuth } from '../hooks/useAuth';
 import './TaskItem.scss';
 
 interface TaskItemProps {
@@ -15,21 +17,21 @@ const PRIORITY_LABELS: Record<string, string> = {
 };
 
 export const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
-  const { toggleTask, requestDelete, undoDelete, confirmDelete, selectTask } = useTaskContext();
+  const { toggleTask, requestDelete, undoDelete, confirmDelete, showToast } = useTaskContext();
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [secondsLeft, setSecondsLeft] = useState(5);
 
   useEffect(() => {
-    if (!task.isPendingDelete) {
-      setSecondsLeft(5);
-      return;
-    }
+    if (!task.isPendingDelete) return;
 
     const timer = setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
           confirmDelete(task.id);
-          return 0;
+          return 5;
         }
         return prev - 1;
       });
@@ -37,6 +39,25 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
 
     return () => clearInterval(timer);
   }, [task.isPendingDelete, task.id, confirmDelete]);
+
+  const requireAuthAction = (action: () => void) => {
+    if (!isAuthenticated) {
+      showToast('Увійдіть у систему, щоб змінювати завдання', 'warning');
+      navigate('/login', { state: { from: location } });
+      return;
+    }
+    action();
+  };
+
+  const handleRequestDelete = () => {
+    setSecondsLeft(5);
+    requestDelete(task.id);
+  };
+
+  const handleUndoDelete = () => {
+    setSecondsLeft(5);
+    undoDelete(task.id);
+  };
 
   if (task.isPendingDelete) {
     return (
@@ -52,7 +73,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
         <button
           type="button"
           className="task-item__btn task-item__btn--undo"
-          onClick={() => undoDelete(task.id)}
+          onClick={handleUndoDelete}
         >
           Скасувати
         </button>
@@ -62,23 +83,19 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
 
   return (
     <li className={`task-item ${task.completed ? 'task-item--completed' : ''}`}>
-      <div className="task-item__content" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+      <div className="task-item__content">
         <input
           type="checkbox"
           className="task-item__checkbox"
           checked={task.completed}
-          onChange={() => toggleTask(task.id)}
-          style={{ marginTop: '5px', width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--accent)' }}
+          onChange={() => requireAuthAction(() => toggleTask(task.id))}
+          aria-label={`Позначити "${task.title}" як виконане`}
         />
         <div>
           <div className="task-item__header">
-            <span
-              className="task-item__title"
-              onClick={() => selectTask(task.id)}
-              style={{ cursor: 'pointer' }}
-            >
+            <Link to={`/tasks/${task.id}`} className="task-item__title">
               {task.title}
-            </span>
+            </Link>
             <span className={`task-item__badge task-item__badge--${task.priority}`}>
               {PRIORITY_LABELS[task.priority] || task.priority}
             </span>
@@ -93,24 +110,23 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit }) => {
       </div>
 
       <div className="task-item__actions">
-        <button
-          type="button"
+        <Link
+          to={`/tasks/${task.id}`}
           className="task-item__btn task-item__btn--secondary"
-          onClick={() => selectTask(task.id)}
         >
           Деталі
-        </button>
+        </Link>
         <button
           type="button"
           className="task-item__btn task-item__btn--edit"
-          onClick={() => onEdit(task)}
+          onClick={() => requireAuthAction(() => onEdit(task))}
         >
           Редагувати
         </button>
         <button
           type="button"
           className="task-item__btn task-item__btn--danger"
-          onClick={() => requestDelete(task.id)}
+          onClick={() => requireAuthAction(handleRequestDelete)}
         >
           Видалити
         </button>
