@@ -17,6 +17,8 @@ export interface Task {
   category: string;
   priority: Priority;
   completed: boolean;
+  createdBy: string;
+  createdAt: string;
   isPendingDelete?: boolean;
 }
 
@@ -32,4 +34,18 @@ export interface TodosResponse {
   total: number;
   skip: number;
   limit: number;
+}
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  image?: string;
+}
+
+export interface LoginResponse extends AuthUser {
+  accessToken: string;
+  refreshToken: string;
 }

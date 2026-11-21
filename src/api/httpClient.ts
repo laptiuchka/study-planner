@@ -2,16 +2,33 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'https://dummyjson.com';
 
 export interface RequestOptions extends RequestInit {
   signal?: AbortSignal;
+  requiresAuth?: boolean;
+}
+
+let authToken: string | null = null;
+
+export const setHttpClientToken = (token: string | null) => {
+  authToken = token;
+};
+
+function buildHeaders(customHeaders?: HeadersInit, requiresAuth = false): Headers {
+  const headers = new Headers(customHeaders);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (requiresAuth && authToken) {
+    headers.set('Authorization', `Bearer ${authToken}`);
+  }
+  return headers;
 }
 
 export const httpClient = {
   async get<T>(endpoint: string, options?: RequestOptions): Promise<T> {
+    const { requiresAuth, headers, ...rest } = options || {};
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      ...options,
+      headers: buildHeaders(headers, requiresAuth),
+      ...rest,
     });
 
     if (!response.ok) {
@@ -22,13 +39,12 @@ export const httpClient = {
   },
 
   async post<T>(endpoint: string, body: unknown, options?: RequestOptions): Promise<T> {
+    const { requiresAuth, headers, ...rest } = options || {};
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildHeaders(headers, requiresAuth),
       body: JSON.stringify(body),
-      ...options,
+      ...rest,
     });
 
     if (!response.ok) {
@@ -39,13 +55,12 @@ export const httpClient = {
   },
 
   async put<T>(endpoint: string, body: unknown, options?: RequestOptions): Promise<T> {
+    const { requiresAuth, headers, ...rest } = options || {};
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildHeaders(headers, requiresAuth),
       body: JSON.stringify(body),
-      ...options,
+      ...rest,
     });
 
     if (!response.ok) {
@@ -56,12 +71,11 @@ export const httpClient = {
   },
 
   async delete<T>(endpoint: string, options?: RequestOptions): Promise<T> {
+    const { requiresAuth, headers, ...rest } = options || {};
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      ...options,
+      headers: buildHeaders(headers, requiresAuth),
+      ...rest,
     });
 
     if (!response.ok) {
