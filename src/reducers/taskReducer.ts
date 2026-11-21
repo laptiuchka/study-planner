@@ -1,4 +1,23 @@
-import { type Task, type TaskAction } from '../types/task';
+import type { Task, Priority } from '../types/task';
+
+export type TaskAction =
+  | {
+      type: 'ADD_TASK';
+      payload: {
+        title: string;
+        description: string;
+        category: string;
+        priority: Priority;
+        createdBy?: string;
+      };
+    }
+  | { type: 'TOGGLE_TASK'; payload: number }
+  | { type: 'UPDATE_TASK'; payload: { id: number; data: Partial<Omit<Task, 'id'>> } }
+  | { type: 'REQUEST_DELETE'; payload: number }
+  | { type: 'CONFIRM_DELETE'; payload: number }
+  | { type: 'UNDO_DELETE'; payload: number }
+  | { type: 'CLEAR_COMPLETED' }
+  | { type: 'RESET_TASKS'; payload: Task[] };
 
 export function taskReducer(state: Task[], action: TaskAction): Task[] {
   switch (action.type) {
@@ -7,6 +26,8 @@ export function taskReducer(state: Task[], action: TaskAction): Task[] {
         ...action.payload,
         id: Date.now(),
         completed: false,
+        createdBy: action.payload.createdBy || 'emilys',
+        createdAt: new Date().toISOString(),
         isPendingDelete: false,
       };
       return [...state, newTask];

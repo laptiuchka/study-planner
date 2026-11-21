@@ -1,37 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router';
 import type { Task, FilterStatus, SortOrder, ToastMessage, ToastType } from '../types/task';
 import { taskRepository, type CreateTaskPayload } from '../repositories/taskRepository';
 import { useDebounce } from '../hooks/useDebounce';
-
-interface TaskContextType {
-  tasks: Task[];
-  filteredTasks: Task[];
-  isLoading: boolean;
-  error: string | null;
-  currentPage: number;
-  totalPages: number;
-  selectedTaskId: number | null;
-  filter: FilterStatus;
-  sortOrder: SortOrder;
-  searchQuery: string;
-  toast: ToastMessage | null;
-  setFilter: (filter: FilterStatus) => void;
-  setSortOrder: (sortOrder: SortOrder) => void;
-  setSearchQuery: (query: string) => void;
-  fetchTasks: (page?: number) => void;
-  addTask: (payload: CreateTaskPayload) => Promise<void>;
-  toggleTask: (id: number) => Promise<void>;
-  updateTask: (id: number, data: Partial<Omit<Task, 'id'>>) => Promise<void>;
-  requestDelete: (id: number) => void;
-  undoDelete: (id: number) => void;
-  confirmDelete: (id: number) => Promise<void>;
-  clearCompleted: () => Promise<void>;
-  resetTasks: () => void;
-  selectTask: (id: number | null) => void;
-  hideToast: () => void;
-}
-
-const TaskContext = createContext<TaskContextType | undefined>(undefined);
+import { TaskContext } from './taskContextObject';
 
 const LIMIT = 10;
 const DUMMY_JSON_MAX_ID = 254;
@@ -42,18 +14,80 @@ const PRIORITY_WEIGHT: Record<string, number> = {
   low: 1,
 };
 
+const VALID_FILTERS: FilterStatus[] = ['all', 'active', 'completed'];
+const VALID_SORTS: SortOrder[] = ['none', 'desc', 'asc'];
+
 export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
-
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
-  const [filter, setFilter] = useState<FilterStatus>('all');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('none');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const rawStatus = searchParams.get('status') as FilterStatus | null;
+  const filter: FilterStatus = rawStatus && VALID_FILTERS.includes(rawStatus) ? rawStatus : 'all';
+
+  const rawSort = searchParams.get('sort') as SortOrder | null;
+  const sortOrder: SortOrder = rawSort && VALID_SORTS.includes(rawSort) ? rawSort : 'none';
+
+  const searchQuery = searchParams.get('q') || '';
+
+  const setFilter = useCallback(
+    (newFilter: FilterStatus) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (newFilter === 'all') {
+            next.delete('status');
+          } else {
+            next.set('status', newFilter);
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const setSortOrder = useCallback(
+    (newSort: SortOrder) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (newSort === 'none') {
+            next.delete('sort');
+          } else {
+            next.set('sort', newSort);
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const setSearchQuery = useCallback(
+    (newQuery: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (!newQuery) {
+            next.delete('q');
+          } else {
+            next.set('q', newQuery);
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
 
   const debouncedSearch = useDebounce(searchQuery, 400);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -66,25 +100,50 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToast(null);
   }, []);
 
-  const fetchTasks = useCallback((page = 1) => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+  const fetchTasks = useCallback(
+    (page = 1) => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
 
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      setIsLoading(true);
+      setError(null);
+
+      const skip = (page - 1) * LIMIT;
+
+      taskRepository
+        .getAll({ limit: LIMIT, skip, signal: controller.signal })
+        .then((data) => {
+          setTasks(data.tasks);
+          setTotalCount(data.total);
+          setCurrentPage(page);
+          setIsLoading(false);
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError') {
+            setError('Не вдалося завантажити завдання з сервера.');
+            setIsLoading(false);
+            showToast('Помилка завантаження даних', 'error');
+          }
+        });
+    },
+    [showToast]
+  );
+
+  useEffect(() => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    setIsLoading(true);
-    setError(null);
-
-    const skip = (page - 1) * LIMIT;
-
     taskRepository
-      .getAll({ limit: LIMIT, skip, signal: controller.signal })
+      .getAll({ limit: LIMIT, skip: 0, signal: controller.signal })
       .then((data) => {
         setTasks(data.tasks);
         setTotalCount(data.total);
-        setCurrentPage(page);
+        setCurrentPage(1);
+        setError(null);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -94,25 +153,27 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
           showToast('Помилка завантаження даних', 'error');
         }
       });
-  }, [showToast]);
 
-  useEffect(() => {
-    fetchTasks(1);
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      controller.abort();
     };
-  }, [fetchTasks]);
+  }, [showToast]);
 
   const addTask = async (payload: CreateTaskPayload) => {
     try {
       const created = await taskRepository.create(payload);
-      const uniqueTask: Task = { ...created, id: Date.now(), isPendingDelete: false };
+      const uniqueTask: Task = {
+        ...created,
+        id: Date.now(),
+        createdBy: payload.createdBy || created.createdBy,
+        createdAt: new Date().toISOString(),
+        isPendingDelete: false,
+      };
       setTasks((prev) => [uniqueTask, ...prev]);
       showToast('Завдання успішно додано!', 'success');
-    } catch {
+    } catch (err) {
       showToast('Помилка при створенні завдання', 'error');
+      throw err;
     }
   };
 
@@ -150,9 +211,10 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await taskRepository.update(id, data);
       }
       showToast('Завдання оновлено!', 'success');
-    } catch {
+    } catch (err) {
       setTasks(previousTasks);
       showToast('Помилка оновлення завдання', 'error');
+      throw err;
     }
   };
 
@@ -169,18 +231,21 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showToast('Видалення скасовано', 'info');
   };
 
-  const confirmDelete = useCallback(async (id: number) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+  const confirmDelete = useCallback(
+    async (id: number) => {
+      setTasks((prev) => prev.filter((t) => t.id !== id));
 
-    try {
-      if (id <= DUMMY_JSON_MAX_ID) {
-        await taskRepository.delete(id);
+      try {
+        if (id <= DUMMY_JSON_MAX_ID) {
+          await taskRepository.delete(id);
+        }
+        showToast('Завдання остаточно видалено', 'warning');
+      } catch {
+        showToast('Помилка видалення на сервері', 'error');
       }
-      showToast('Завдання остаточно видалено', 'warning');
-    } catch {
-      showToast('Помилка видалення на сервері', 'error');
-    }
-  }, [showToast]);
+    },
+    [showToast]
+  );
 
   const clearCompleted = async () => {
     const completedIds = tasks.filter((t) => t.completed).map((t) => t.id);
@@ -194,9 +259,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetTasks = () => {
-    setFilter('all');
-    setSortOrder('none');
-    setSearchQuery('');
+    setSearchParams({}, { replace: true });
     fetchTasks(1);
     showToast('Список оновлено з сервера', 'info');
   };
@@ -241,7 +304,6 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error,
         currentPage,
         totalPages,
-        selectedTaskId,
         filter,
         sortOrder,
         searchQuery,
@@ -258,19 +320,11 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         confirmDelete,
         clearCompleted,
         resetTasks,
-        selectTask: setSelectedTaskId,
+        showToast,
         hideToast,
       }}
     >
       {children}
     </TaskContext.Provider>
   );
-};
-
-export const useTaskContext = () => {
-  const context = useContext(TaskContext);
-  if (!context) {
-    throw new Error('useTaskContext must be used within a TaskProvider');
-  }
-  return context;
 };
