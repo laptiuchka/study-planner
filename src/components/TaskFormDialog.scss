@@ -1,0 +1,162 @@
+.task-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(8, 6, 13, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+  animation: dialogFadeIn 0.2s ease;
+}
+
+.task-dialog {
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 520px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  &__title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-h);
+  }
+
+  &__close {
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+
+    &:hover {
+      background-color: var(--accent-bg);
+      color: var(--accent);
+    }
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: 6px;
+  }
+
+  &__label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-h);
+  }
+
+  &__input,
+  &__textarea,
+  &__select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background-color: var(--bg);
+    color: var(--text-h);
+    font-size: 0.95rem;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+
+    &:focus {
+      outline: none;
+      border-color: #6b3ba7;
+    }
+
+    &--error {
+      border-color: #dc3545;
+    }
+  }
+
+  &__textarea {
+    resize: vertical;
+    min-height: 84px;
+  }
+
+  &__error {
+    font-size: 0.8rem;
+    color: #dc3545;
+  }
+
+  &__row {
+    display: flex;
+    gap: 14px;
+
+    @media (max-width: 540px) {
+      flex-direction: column;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  &__btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &--primary {
+      background-color: #6b3ba7;
+      color: #ffffff;
+
+      &:hover:not(:disabled) {
+        background-color: #532d86;
+      }
+    }
+
+    &--secondary {
+      background-color: var(--code-bg);
+      color: var(--text-h);
+      border: 1px solid var(--border);
+
+      &:hover:not(:disabled) {
+        border-color: #6b3ba7;
+        color: #6b3ba7;
+      }
+    }
+  }
+}
+
+@keyframes dialogFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
